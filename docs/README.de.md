@@ -70,11 +70,15 @@ flowchart TD
 pip install sqlalchemy-cubrid
 ```
 
-Mit dem Pure-Python-Treiber (kein C-Build erforderlich):
+Mit dem Pure-Python-Treiber (synchron und asynchron):
 
 ```bash
 pip install "sqlalchemy-cubrid[pycubrid]"
 ```
+
+Das Extra `[pycubrid]` unterstützt `cubrid+pycubrid://` und `cubrid+aiopycubrid://`
+und enthält SQLAlchemys `asyncio`-Extra (`greenlet`). Wenn kein kompatibles Wheel
+verfügbar ist, benötigt die Installation von `greenlet` möglicherweise Build-Werkzeuge.
 
 Mit Alembic-Unterstützung:
 

@@ -41,6 +41,10 @@ Python runs:
 pip install "sqlalchemy-cubrid[pycubrid]"
 ```
 
+This extra supports both sync and async pycubrid URLs and includes
+SQLAlchemy's `asyncio` dependencies (`greenlet`). The driver itself is pure Python;
+`greenlet` may require build tools when no compatible wheel is available.
+
 Or install separately:
 
 ```bash
@@ -134,6 +138,9 @@ For new projects prefer `cubrid+pycubrid://` (pure Python, easiest installation,
 ## Async Connection
 
 For async applications, use the `cubrid+aiopycubrid://` URL scheme with `create_async_engine`. Requires `pycubrid>=1.3.2,<2.0`.
+
+Install `sqlalchemy-cubrid[pycubrid]` to include the driver and SQLAlchemy's async
+bridge. If installing the packages separately, also install `SQLAlchemy[asyncio]`.
 
 ```python
 from sqlalchemy.ext.asyncio import create_async_engine

@@ -41,6 +41,10 @@
 pip install "sqlalchemy-cubrid[pycubrid]"
 ```
 
+이 extra는 pycubrid의 동기·비동기 URL을 모두 지원하고 SQLAlchemy의
+`asyncio` 의존성(`greenlet`)을 포함합니다. 드라이버 자체는 순수 Python이며,
+호환 wheel이 없으면 `greenlet` 설치에 빌드 도구가 필요할 수 있습니다.
+
 또는 따로 설치:
 
 ```bash
@@ -130,6 +134,9 @@ engine = create_engine("cubrid+pycubrid://dba:password@localhost:33000/demodb")
 ## 비동기 연결
 
 비동기 애플리케이션에서는 `create_async_engine`과 함께 `cubrid+aiopycubrid://` URL 스킴을 사용하세요. `pycubrid>=1.3.2,<2.0`이 필요합니다.
+
+`sqlalchemy-cubrid[pycubrid]`를 설치하면 드라이버와 SQLAlchemy의 비동기 브리지가
+포함됩니다. 패키지를 따로 설치한다면 `SQLAlchemy[asyncio]`도 설치하세요.
 
 ```python
 from sqlalchemy.ext.asyncio import create_async_engine

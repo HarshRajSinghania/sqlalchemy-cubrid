@@ -177,6 +177,12 @@ recommended driver for new projects.
 
 For the pure Python pycubrid dialect variants, install `sqlalchemy-cubrid[pycubrid]` with `pycubrid>=1.3.2,<2.0`. That minimum version is required for native sync and async `ping(False)` support used by `pool_pre_ping`.
 
+The `[pycubrid]` extra supports both sync and async connections. It includes
+`SQLAlchemy[asyncio]`, which supplies `greenlet` on SQLAlchemy 2.0 and 2.1. The
+`[dev]` extra also includes this bridge for async test imports. Bare installation
+keeps its existing SQLAlchemy dependency. The pycubrid driver remains pure Python,
+but `greenlet` may require build tools when no compatible wheel is available.
+
 ### From Source (Required for CI)
 
 ```bash

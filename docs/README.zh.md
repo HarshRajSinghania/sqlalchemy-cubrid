@@ -68,11 +68,15 @@ flowchart TD
 pip install sqlalchemy-cubrid
 ```
 
-使用纯 Python 驱动（无需 C 构建）：
+使用纯 Python 驱动（同步和异步）：
 
 ```bash
 pip install "sqlalchemy-cubrid[pycubrid]"
 ```
+
+`[pycubrid]` extra 同时支持 `cubrid+pycubrid://` 和 `cubrid+aiopycubrid://`，
+并包含 SQLAlchemy 的 `asyncio` extra（`greenlet`）。如果没有兼容的 wheel，
+安装 `greenlet` 可能需要构建工具。
 
 包含 Alembic 支持：
 

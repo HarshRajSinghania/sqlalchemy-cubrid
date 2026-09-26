@@ -69,11 +69,15 @@ flowchart TD
 pip install sqlalchemy-cubrid
 ```
 
-순수 Python 드라이버 사용 시(C 빌드 불필요):
+순수 Python 드라이버 사용 시(동기 및 비동기):
 
 ```bash
 pip install "sqlalchemy-cubrid[pycubrid]"
 ```
+
+`[pycubrid]` extra는 `cubrid+pycubrid://`와 `cubrid+aiopycubrid://`를 모두 지원하며,
+SQLAlchemy의 `asyncio` extra(`greenlet`)를 포함합니다. 호환 wheel이 없으면
+`greenlet` 설치에 빌드 도구가 필요할 수 있습니다.
 
 Alembic 지원 포함:
 

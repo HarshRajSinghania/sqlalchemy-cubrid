@@ -76,11 +76,15 @@ flowchart TD
 pip install sqlalchemy-cubrid
 ```
 
-With the pure Python driver (no C build needed):
+With the pure Python driver (sync and async):
 
 ```bash
 pip install "sqlalchemy-cubrid[pycubrid]"
 ```
+
+The `[pycubrid]` extra supports both `cubrid+pycubrid://` and
+`cubrid+aiopycubrid://`. It includes SQLAlchemy's `asyncio` extra (`greenlet`);
+`greenlet` may need build tools if a compatible wheel is unavailable.
 
 With Alembic support:
 
@@ -97,7 +101,7 @@ pip install "sqlalchemy-cubrid[cubrid]"
 > The `[cubrid]` extra installs the legacy [CUBRID-Python](https://github.com/CUBRID/cubrid-python)
 > C-extension driver, which is the driver bound to the bare `cubrid://` URL. For new
 > projects, prefer the pure-Python `[pycubrid]` driver (the `cubrid+pycubrid://` URL) —
-> it installs with pip alone, needs no build tools, and is the recommended driver for
+> it is the recommended driver for
 > this dialect. To select the legacy C-extension driver explicitly and unambiguously,
 > use the `cubrid+cubriddb://` URL together with the `[cubriddb]` install extra.
 
