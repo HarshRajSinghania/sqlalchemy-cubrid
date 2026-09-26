@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Last-insert-ID SQL fallback works on SQLAlchemy 2.x (#458)** — both execution contexts now obtain a regular cursor from the active DBAPI connection for `SELECT LAST_INSERT_ID()`, instead of calling SQLAlchemy's unimplemented server-side-cursor hook. Native driver IDs (including `None`) remain preferred, and the temporary cursor is closed even if execution, fetching, or integer conversion fails. This is a backward-compatible bug fix suitable for a patch release.
+
 ## [1.7.1] - 2026-09-18
 
 ### Added

@@ -6221,6 +6221,12 @@ The standard DB-API `cursor.lastrowid` attribute is not implemented. The dialect
 uses `connection.get_last_insert_id()` instead, with a `SELECT LAST_INSERT_ID()`
 SQL fallback.
 
+The fallback opens a regular cursor on the active DBAPI connection and closes it
+after fetching the ID, including when execution, fetching, or integer conversion
+raises. It does not require server-side cursor support. The pycubrid execution
+context uses the same fallback when `cursor.lastrowid` is unavailable. A native
+driver result of `None` is returned directly without running the fallback query.
+
 ### 4. CUBRID 12.x Compatibility
 
 CUBRID 12 has not yet been released. When available, the driver and dialect will be
