@@ -713,7 +713,8 @@ class TestAsyncResultCompletenessAcrossTransactionBoundary:
                 # The first response must not hold the whole result.
                 assert 0 < cursor._fetched_count < _WIDE_ROWS
                 first = await cursor.fetchone()
-                assert first is not None and first[0] == 0
+                # Checked before the boundary, so it holds even when the rest raises.
+                assert first is not None and first[0] == 0 and first[1] == _WIDE_PAYLOAD
                 if boundary == "commit":
                     await driver_conn.commit()
                 else:
@@ -724,10 +725,12 @@ class TestAsyncResultCompletenessAcrossTransactionBoundary:
                 except pycubrid.Error:
                     rest = None  # an explicit failure satisfies the contract
                 if rest is not None:
-                    # Whatever was returned is an in-order prefix with intact payloads.
-                    ids = [first[0]] + [row[0] for row in rest]
+                    # Everything returned, including the row fetchone() consumed,
+                    # is an in-order prefix with intact payloads.
+                    returned = [first, *rest]
+                    ids = [row[0] for row in returned]
                     assert ids == list(range(len(ids)))
-                    assert all(row[1] == _WIDE_PAYLOAD for row in rest)
+                    assert all(row[1] == _WIDE_PAYLOAD for row in returned)
                 # Only the completeness check is gated; an explicit error passes,
                 # which is a strict XPASS on a build that already raises.
                 xfail_unreleased_pycubrid_fix(
