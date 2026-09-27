@@ -1,4 +1,4 @@
-.PHONY: help install lint format typecheck security check check-all test test-all integration integration-local docker-up docker-down changelog clean clean-all doctor release
+.PHONY: help install lint format check-tool-versions typecheck security check check-all test test-all integration integration-local docker-up docker-down changelog clean clean-all doctor release
 
 PYTEST = python3 -m pytest
 PYTHON = python3
@@ -16,7 +16,10 @@ install: ## Install in development mode with all dependencies
 	pip install -e ".[dev]"
 	pre-commit install
 
-lint: ## Run linter and format checks
+check-tool-versions: ## Detect local and CI tool-version drift
+	$(PYTHON) scripts/check_tool_versions.py
+
+lint: check-tool-versions ## Run linter and format checks
 	$(RUFF) check $(SRC)/ $(TESTS)/
 	$(RUFF) format --check $(SRC)/ $(TESTS)/
 

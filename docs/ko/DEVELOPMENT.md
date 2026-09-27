@@ -136,6 +136,7 @@ graph TD
 make help          # 사용 가능한 모든 타깃 표시
 make install       # 모든 의존성과 함께 개발 모드 설치
 make lint          # ruff 린터 + 포맷 검사 실행
+make check-tool-versions # 로컬/CI 도구 핀과 타입 검사 셀 일치 확인
 make typecheck     # 의존성 버전 출력 및 strict mypy 검사
 make format        # 린트 문제 자동 수정 및 코드 포맷
 make test          # 커버리지와 함께 오프라인 테스트 실행 (95% 임계값)
@@ -289,11 +290,15 @@ make integration
 
 ### tox 구성
 
-`tox.ini`는 Python 3.10–3.13의 로컬 환경을 정의합니다. GitHub Actions도 Python 3.14에서 오프라인 스위트를 실행합니다.
+`tox.ini`는 Python 3.10–3.14의 로컬 오프라인 환경, 고정된 Ruff 린트 환경,
+CI와 같은 Makefile 타깃 및 SQLAlchemy/Python 조합을 쓰는 `typecheck-sa20` /
+`typecheck-sa21` 환경을 정의합니다. 기존 pycubrid/Alembic extra와 개발 테스트
+의존성을 사용합니다. 오프라인 선택은 `-m "not integration"`이며 통합 환경은
+`-m integration`을 선택합니다. 오프라인 커버리지 임계값은 95%를 유지합니다.
 
 ```ini
 [tox]
-envlist = lint, py310, py311, py312, py313
+envlist = lint, typecheck-sa20, typecheck-sa21, py310, py311, py312, py313, py314
 skip_missing_interpreters = true
 ```
 
@@ -311,6 +316,9 @@ tox -e py312
 
 # 린트 검사만 실행
 tox -e lint
+
+# 지정된 두 SQLAlchemy 타입 검사 환경 실행
+tox -e typecheck-sa20,typecheck-sa21
 ```
 
 ### CI 매트릭스
@@ -402,6 +410,20 @@ make lint
 ## Pre-Commit 훅
 
 Pre-commit 훅은 `git commit` 시 린트와 포맷 검사를 자동 실행합니다.
+
+Ruff/mypy 버전의 기준은 `pyproject.toml`의 개발 의존성 핀입니다. 격리된 mypy 훅은
+선택된 SQLAlchemy 비동기 extra와 기존 Alembic 지원 범위를 설치한 뒤 프로젝트의
+엄격한 설정으로 `sqlalchemy_cubrid/`를 검사합니다. 스텁을 자동 설치하거나 누락된
+임포트를 무시하지 않습니다. Ruff의 명시적 `include = ["*.py", "*.pyi"]`와 동일한
+훅 타입 설정으로 CLI, CI, 훅 모두 Python 소스를 다루며 문서의 코드 스니펫을 다시
+작성하지 않습니다.
+
+도구 핀을 바꿀 때는 같은 변경에서 pre-commit 리비전과 tox 핀도 갱신하세요. 필요한
+경우 CI의 mypy 핀도 갱신합니다. `scripts/check_tool_versions.py`는 SQLAlchemy 타입
+검사 조합을 CI에서 읽습니다. 갱신 후 `make check-tool-versions`,
+`pre-commit run --all-files`, `tox -e lint,typecheck-sa20,typecheck-sa21`을 실행하세요.
+일관성 검사는 CI 린트, tox 린트, 로컬 pre-commit 훅에서 실행되므로 의존성만 갱신한
+변경이 오래된 핀을 조용히 남길 수 없습니다.
 
 ### 설정
 
