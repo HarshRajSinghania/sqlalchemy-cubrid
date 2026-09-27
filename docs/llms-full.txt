@@ -5814,6 +5814,12 @@ remain required. To choose a virtualenv interpreter locally, use
 
 ### Offline Tests (No Database Required)
 
+Async adapter fixtures in synchronous unit tests consume their actual coroutine
+entry through the await bridge and assert that it was awaited. Patch both the
+connection bridge (SQLAlchemy 2.0) and module bridge (2.1) when applicable; a
+mock that simply returns a cursor can hide an invalid adapter and leak an
+unawaited coroutine into pytest's garbage-collection checks.
+
 The majority of the test suite runs without a live CUBRID instance:
 
 ```bash
