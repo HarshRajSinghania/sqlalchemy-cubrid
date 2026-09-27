@@ -6070,9 +6070,11 @@ make lint
 Pre-commit hooks run lint and format checks automatically on `git commit`.
 
 Ruff/mypy versions are single-sourced from the dev pins in `pyproject.toml`.
-The isolated mypy hook installs the selected SQLAlchemy async extra and the
-existing Alembic supported range, then checks `sqlalchemy_cubrid/` with the
-project's strict configuration. It does not install stubs automatically or
+The isolated mypy hook follows interpreter compatibility: Python 3.10 installs
+SQLAlchemy 2.0.53, and Python 3.11+ installs SQLAlchemy 2.1.1 (which requires
+Python 3.11+), using exact conditional dependencies for the async extra. It also
+installs the existing Alembic supported range, then checks `sqlalchemy_cubrid/`
+with the project's strict configuration. It does not install stubs automatically or
 suppress missing imports. Ruff's explicit `include = ["*.py", "*.pyi"]` and
 the matching hook types keep CLI, CI and hooks on Python sources rather than
 rewriting documentation snippets.

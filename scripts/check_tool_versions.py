@@ -57,9 +57,20 @@ def check(root: Path) -> list[str]:
             ):
                 errors.append("Both Ruff hooks must use the same Python/pyi scope as the CLI")
         if tool == "mypy":
-            latest_sa = max((sa for _, sa in cells), key=lambda v: tuple(map(int, v.split("."))))
-            for dependency in (f"sqlalchemy[asyncio]=={latest_sa}", alembic):
-                if not re.search(rf"^\s*- {re.escape(dependency)}\s*$", block, re.MULTILINE | re.I):
+            sa_pins = {".".join(sa.split(".")[:2]): sa for _, sa in cells}
+            if "2.0" not in sa_pins or "2.1" not in sa_pins:
+                raise ValueError(
+                    "Mypy hook markers require CI's designated SQLAlchemy 2.0/2.1 pins"
+                )
+            dependencies = (
+                f"sqlalchemy[asyncio]=={sa_pins['2.0']}; python_version < '3.11'",
+                f"sqlalchemy[asyncio]=={sa_pins['2.1']}; python_version >= '3.11'",
+                alembic,
+            )
+            for dependency in dependencies:
+                if not re.search(
+                    rf"^\s*- [\"']?{re.escape(dependency)}[\"']?\s*$", block, re.MULTILINE | re.I
+                ):
                     errors.append(f"mypy hook dependencies: missing {dependency}")
             args = _unique(r"^\s*args:\s*\[(.*?)\]", block, "mypy hook arguments")
             if not re.search(r"""["']sqlalchemy_cubrid/["']""", args) or not re.search(

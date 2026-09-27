@@ -412,8 +412,10 @@ make lint
 Pre-commit 훅은 `git commit` 시 린트와 포맷 검사를 자동 실행합니다.
 
 Ruff/mypy 버전의 기준은 `pyproject.toml`의 개발 의존성 핀입니다. 격리된 mypy 훅은
-선택된 SQLAlchemy 비동기 extra와 기존 Alembic 지원 범위를 설치한 뒤 프로젝트의
-엄격한 설정으로 `sqlalchemy_cubrid/`를 검사합니다. 스텁을 자동 설치하거나 누락된
+조건부 핀으로 Python 3.10에서 SQLAlchemy 2.0.53을, Python 3.11+에서 SQLAlchemy
+2.1.1(최소 Python 3.11)을 설치합니다. 비동기 extra와 기존 Alembic 지원 범위도
+포함한 뒤 프로젝트의 엄격한 설정으로 `sqlalchemy_cubrid/`를 검사합니다. 스텁을 자동
+설치하거나 누락된
 임포트를 무시하지 않습니다. Ruff의 명시적 `include = ["*.py", "*.pyi"]`와 동일한
 훅 타입 설정으로 CLI, CI, 훅 모두 Python 소스를 다루며 문서의 코드 스니펫을 다시
 작성하지 않습니다.
