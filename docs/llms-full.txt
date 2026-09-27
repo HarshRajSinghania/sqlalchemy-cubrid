@@ -5874,9 +5874,12 @@ docker compose up -d
 docker compose logs -f cubrid
 
 # Set the connection URL
-export CUBRID_TEST_URL="cubrid://dba@localhost:33000/testdb"
+export CUBRID_TEST_URL="cubrid+pycubrid://dba@localhost:33000/testdb"
 
-# Run integration tests
+# Run the regular tox profile (installs the existing pure-driver extra)
+tox -e integration
+
+# Run a focused sync file in an environment with pycubrid installed
 pytest test/test_integration.py -v
 
 # Run async integration tests
@@ -5885,6 +5888,16 @@ pytest test/test_aio_integration.py -v
 # Stop the container
 docker compose down -v
 ```
+
+The regular tox profile requires an explicit `cubrid+pycubrid` URL. It rejects
+missing URLs and legacy C-extension schemes, then probes both sync and derived
+async connections with bounded `SELECT 1` requests before pytest. Async suites
+derive `cubrid+aiopycubrid` with SQLAlchemy's URL API, retaining credentials,
+ports and query options; `CUBRID_TEST_AURL` remains an explicit async override.
+Failures do not print URL credentials. Without the optional native C-extension,
+the four existing driver-differential comparisons are intentionally skipped;
+that profile does not claim to test CUBRIDdb. Formal CI's native-driver
+`--dburi` route remains separate and unchanged.
 
 ### Full SA Test Suite
 

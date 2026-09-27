@@ -74,10 +74,10 @@ pytest test/test_compiler.py::TestCubridSQLCompiler::test_select_limit -v
 docker compose up -d
 
 # Set the connection URL
-export CUBRID_TEST_URL="cubrid://dba@localhost:33000/testdb"
+export CUBRID_TEST_URL="cubrid+pycubrid://dba@localhost:33000/testdb"
 
-# Run integration tests
-pytest test/test_integration.py -v
+# Run the regular pure-driver profile with sync/async connection preflight
+tox -e integration
 
 # Stop the container when done
 docker compose down
@@ -180,8 +180,8 @@ pre-commit run --all-files
 5. **Run integration tests** if your change affects database interaction:
    ```bash
    docker compose up -d
-   export CUBRID_TEST_URL="cubrid://dba@localhost:33000/testdb"
-   pytest test/test_integration.py -v
+   export CUBRID_TEST_URL="cubrid+pycubrid://dba@localhost:33000/testdb"
+   tox -e integration
    ```
 
 ### PR Content

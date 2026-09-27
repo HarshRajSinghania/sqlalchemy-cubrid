@@ -85,3 +85,11 @@ def test_formal_suite_cannot_enter_regular_tox_integration(tooling_config: Path)
     config = tooling_config / "tox.ini"
     config.write_text(config.read_text().replace("--ignore=test/test_suite.py", ""))
     assert any("formal suite" in error and "--dburi" in error for error in check(tooling_config))
+
+
+def test_integration_preflight_cannot_be_omitted(tooling_config: Path) -> None:
+    config = tooling_config / "tox.ini"
+    config.write_text(
+        config.read_text().replace("python -m scripts.check_integration_connection", "")
+    )
+    assert any("preflight first" in error for error in check(tooling_config))

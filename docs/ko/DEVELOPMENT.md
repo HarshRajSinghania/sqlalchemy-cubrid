@@ -218,9 +218,12 @@ docker compose up -d
 docker compose logs -f cubrid
 
 # 연결 URL 설정
-export CUBRID_TEST_URL="cubrid://dba@localhost:33000/testdb"
+export CUBRID_TEST_URL="cubrid+pycubrid://dba@localhost:33000/testdb"
 
-# 통합 테스트 실행
+# 기존 순수 Python 드라이버 extra를 설치하는 일반 tox 프로파일
+tox -e integration
+
+# pycubrid가 설치된 환경에서 특정 동기 파일 실행
 pytest test/test_integration.py -v
 
 # 비동기 통합 테스트 실행
@@ -229,6 +232,15 @@ pytest test/test_aio_integration.py -v
 # 컨테이너 중지
 docker compose down -v
 ```
+
+일반 tox 프로파일은 명시적인 `cubrid+pycubrid` URL을 요구합니다. URL 누락이나
+레거시 C 확장 스킴을 거부하고 pytest 전에 제한된 시간의 `SELECT 1`로 동기·파생
+비동기 연결을 모두 확인합니다. 비동기 스위트는 SQLAlchemy URL API로 인증 정보,
+포트, 쿼리 옵션을 보존한 `cubrid+aiopycubrid` URL을 파생하며 `CUBRID_TEST_AURL`은
+명시적 비동기 재정의로 유지합니다. 실패 메시지는 URL 인증 정보를 출력하지 않습니다.
+선택적 네이티브 C 확장이 없으면 기존 드라이버 차분 비교 4건은 의도적으로
+건너뛰며 CUBRIDdb를 검증했다고 주장하지 않습니다. 공식 CI의 네이티브 드라이버
+`--dburi` 경로는 별도로 유지됩니다.
 
 ### 전체 SA 테스트 스위트
 

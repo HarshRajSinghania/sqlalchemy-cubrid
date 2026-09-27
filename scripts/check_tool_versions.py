@@ -51,6 +51,10 @@ def check(root: Path) -> list[str]:
         errors.append(
             "tox integration must exclude the formal suite that requires explicit --dburi"
         )
+    if tox.get("testenv:integration", "commands").strip().splitlines()[0].strip() != (
+        "python -m scripts.check_integration_connection"
+    ):
+        errors.append("tox integration must run its pure-driver connection preflight first")
     ruff = _unique(r"^\[tool.ruff\]\n(.*?)(?=^\[|\Z)", project, "Ruff configuration")
     included = _unique(r"^include\s*=\s*\[([^\n]+)\]", ruff, "Ruff file scope")
     if re.findall(r'"([^"\n]+)"', included) != ["*.py", "*.pyi"]:
