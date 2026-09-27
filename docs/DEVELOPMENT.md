@@ -308,7 +308,10 @@ Ruff lint environment, and `typecheck-sa20` / `typecheck-sa21` environments that
 run the same Makefile target and pinned SQLAlchemy/Python pairs as CI. Tox uses
 the existing pycubrid/Alembic extras and development test dependencies. Offline
 selection is `-m "not integration"`; the integration environment selects
-`-m integration`. The offline coverage threshold remains 95%.
+`-m integration` with `--ignore=test/test_suite.py`. The formal SQLAlchemy
+compliance suite requires the testing plugin enabled by `--dburi`; existing CI
+runs it separately with that argument and its known-failure baseline. Regular
+tox integration does not run the formal suite. The offline threshold remains 95%.
 
 ```ini
 [tox]

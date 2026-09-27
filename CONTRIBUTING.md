@@ -134,17 +134,15 @@ This project uses [Ruff](https://docs.astral.sh/ruff/) for linting and formattin
 ### Running Checks
 
 ```bash
-# Check lint
-ruff check sqlalchemy_cubrid/ test/
+# Check synchronized tooling and every maintained Python source path
+make lint
 
-# Auto-fix lint issues
-ruff check --fix sqlalchemy_cubrid/ test/
+# Apply fixes and formatting over the same shared paths
+make format
 
-# Check formatting
-ruff format --check sqlalchemy_cubrid/ test/
-
-# Apply formatting
-ruff format sqlalchemy_cubrid/ test/
+# Check strict typing, or run lint + typing + security together
+make typecheck
+make check-all
 ```
 
 ### Pre-commit Hooks
@@ -171,14 +169,12 @@ pre-commit run --all-files
 
 3. **Run the full test suite** and ensure all tests pass:
    ```bash
-   pytest test/ -v --ignore=test/test_integration.py --ignore=test/test_suite.py \
-     --cov=sqlalchemy_cubrid --cov-report=term-missing --cov-fail-under=95
+   make test
    ```
 
-4. **Run lint checks**:
+4. **Run the shared lint, type and security checks**:
    ```bash
-   ruff check sqlalchemy_cubrid/ test/
-   ruff format --check sqlalchemy_cubrid/ test/
+   make check-all
    ```
 
 5. **Run integration tests** if your change affects database interaction:

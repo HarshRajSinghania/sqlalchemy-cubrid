@@ -299,7 +299,10 @@ make integration
 CI와 같은 Makefile 타깃 및 SQLAlchemy/Python 조합을 쓰는 `typecheck-sa20` /
 `typecheck-sa21` 환경을 정의합니다. 기존 pycubrid/Alembic extra와 개발 테스트
 의존성을 사용합니다. 오프라인 선택은 `-m "not integration"`이며 통합 환경은
-`-m integration`을 선택합니다. 오프라인 커버리지 임계값은 95%를 유지합니다.
+`-m integration`과 `--ignore=test/test_suite.py`를 사용합니다. 공식 SQLAlchemy
+컴플라이언스 스위트는 `--dburi`로 활성화되는 테스트 플러그인이 필요하며 기존 CI가
+해당 인자와 알려진 실패 기준을 사용해 별도로 실행합니다. 일반 tox 통합 실행에는
+공식 스위트가 포함되지 않습니다. 오프라인 커버리지 임계값은 95%를 유지합니다.
 
 ```ini
 [tox]

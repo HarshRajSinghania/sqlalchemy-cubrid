@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import configparser
 import re
+import shlex
 from pathlib import Path
 
 
@@ -46,6 +47,10 @@ def check(root: Path) -> list[str]:
         errors.append("CI lint must call the shared Makefile lint target")
     if tox.get("testenv:lint", "commands").strip() != "make lint PYTHON={envpython}":
         errors.append("tox lint must call the shared Makefile lint target")
+    if "--ignore=test/test_suite.py" not in shlex.split(tox.get("testenv:integration", "commands")):
+        errors.append(
+            "tox integration must exclude the formal suite that requires explicit --dburi"
+        )
     ruff = _unique(r"^\[tool.ruff\]\n(.*?)(?=^\[|\Z)", project, "Ruff configuration")
     included = _unique(r"^include\s*=\s*\[([^\n]+)\]", ruff, "Ruff file scope")
     if re.findall(r'"([^"\n]+)"', included) != ["*.py", "*.pyi"]:

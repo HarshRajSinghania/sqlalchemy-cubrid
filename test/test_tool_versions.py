@@ -79,3 +79,9 @@ def test_lint_target_drift_is_detected(tooling_config: Path, surface: str) -> No
         config.read_text().replace("make lint", "ruff check sqlalchemy_cubrid/ test/")
     )
     assert any("shared Makefile lint target" in error for error in check(tooling_config))
+
+
+def test_formal_suite_cannot_enter_regular_tox_integration(tooling_config: Path) -> None:
+    config = tooling_config / "tox.ini"
+    config.write_text(config.read_text().replace("--ignore=test/test_suite.py", ""))
+    assert any("formal suite" in error and "--dburi" in error for error in check(tooling_config))
