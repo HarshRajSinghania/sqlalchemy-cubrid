@@ -1,8 +1,9 @@
 .PHONY: help install lint format typecheck security check check-all test test-all integration integration-local docker-up docker-down changelog clean clean-all doctor release
 
 PYTEST = python3 -m pytest
+PYTHON = python3
 RUFF = ruff
-MYPY = mypy
+MYPY = $(PYTHON) -m mypy
 BANDIT = bandit
 SRC = sqlalchemy_cubrid
 TESTS = test
@@ -24,6 +25,7 @@ format: ## Auto-fix lint issues and format code
 	$(RUFF) format $(SRC)/ $(TESTS)/
 
 typecheck: ## Run mypy type checking
+	$(PYTHON) -c 'import platform; from importlib.metadata import version; print("Python:", platform.python_version()); [print(name + ":", version(name)) for name in ("SQLAlchemy", "alembic", "mypy")]'
 	$(MYPY) $(SRC)/ --config-file=pyproject.toml
 
 security: ## Run security scans (bandit)
