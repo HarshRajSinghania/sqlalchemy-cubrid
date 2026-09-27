@@ -91,6 +91,7 @@ version = {attr = "sqlalchemy_cubrid.__version__"}
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+include = ["*.py", "*.pyi"]
 
 [tool.ruff.lint]
 # Pin the rule set explicitly instead of inheriting ruff's implicit defaults.
