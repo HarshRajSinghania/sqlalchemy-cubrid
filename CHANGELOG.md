@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Last-insert-ID SQL fallback works on SQLAlchemy 2.x (#458)** — both execution contexts now obtain a regular cursor from the active DBAPI connection for `SELECT LAST_INSERT_ID()`, instead of calling SQLAlchemy's unimplemented server-side-cursor hook. Native driver IDs (including `None`) remain preferred, and the temporary cursor is closed even if execution, fetching, or integer conversion fails. This is a backward-compatible bug fix suitable for a patch release.
 - **Nightly mutation testing migrated to mutmut 3** — the `dev` extra now pins `mutmut>=3.8,<4` (was `>=2.5,<3`; supersedes #450). The nightly `mutation-testing` job used mutmut 2 CLI options (`run --paths-to-mutate`, `result-ids`) that mutmut 3 removed, and masked failures with `|| true`, so an upgrade would have printed a wrong score instead of failing. The `[mutmut]` section in `setup.cfg` now uses mutmut 3 keys (`source_paths`, `only_mutate`, pytest arguments, `forkserver` process isolation because two MERGE tests cannot run twice in one process), and the job reads the score from `mutmut export-cicd-stats`. A mutmut crash, failing clean test run, zero mutants or zero kills now fails the step; surviving mutants only lower the reported score, and the job remains non-gating (`continue-on-error`). mutmut 3 generates more mutants than mutmut 2, so scores are not comparable with the earlier 288/449 baseline. CI/dev tooling only; no runtime change.
 
+### Docs
+- Added a README "First contribution" guide (with Korean translation) pointing newcomers to the right sibling repo for their first PR, and documented the `good first issue` → `status: in progress` label lifecycle in AGENTS.md.
+
 ## [1.7.1] - 2026-09-18
 
 ### Added
