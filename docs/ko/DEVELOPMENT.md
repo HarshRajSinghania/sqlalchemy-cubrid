@@ -136,6 +136,7 @@ graph TD
 make help          # 사용 가능한 모든 타깃 표시
 make install       # 모든 의존성과 함께 개발 모드 설치
 make lint          # ruff 린터 + 포맷 검사 실행
+make typecheck     # 의존성 버전 출력 및 strict mypy 검사
 make format        # 린트 문제 자동 수정 및 코드 포맷
 make test          # 커버리지와 함께 오프라인 테스트 실행 (95% 임계값)
 make test-all      # 모든 Python 버전에서 tox 실행
@@ -148,6 +149,19 @@ make clean         # 빌드 산출물과 캐시 제거
 ---
 
 ## 테스트 실행
+
+### 엄격한 타입 검사
+
+개발 환경에서 `make typecheck`를 실행하세요. Python, SQLAlchemy, Alembic,
+mypy 버전을 출력한 다음
+`python3 -m mypy sqlalchemy_cubrid/ --config-file=pyproject.toml`를 실행합니다.
+개발 의존성은 mypy `2.3.1`을 고정합니다.
+
+CI는 Python 3.10 / SQLAlchemy 2.0.53과 Python 3.13 / SQLAlchemy 2.1.1의 두 셀에서
+같은 Makefile 타깃을 실행합니다. 두 셀 모두 필수입니다. 타입 검사 잡이 실패하거나
+취소되거나 건너뛰어지면 필수 `matrix-result` 검사가 실패합니다. Ruff와 95% 최소
+커버리지의 기존 오프라인 테스트도 계속 필수입니다. 로컬 가상 환경 인터프리터를
+지정하려면 `make typecheck PYTHON=/path/to/venv/bin/python`을 사용하세요.
 
 ### 오프라인 테스트 (데이터베이스 불필요)
 

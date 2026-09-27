@@ -135,6 +135,7 @@ All common development tasks are available via `make`:
 make help          # Show all available targets
 make install       # Install in dev mode with all dependencies
 make lint          # Run ruff linter + format checks
+make typecheck     # Report versions and run strict mypy
 make format        # Auto-fix lint issues and format code
 make test          # Run offline tests with coverage (95% threshold)
 make test-all      # Run tox across all Python versions
@@ -147,6 +148,20 @@ make clean         # Remove build artifacts and caches
 ---
 
 ## Running Tests
+
+### Strict Type Checking
+
+Run `make typecheck` in the development environment. It reports Python,
+SQLAlchemy, Alembic and mypy versions, then runs
+`python3 -m mypy sqlalchemy_cubrid/ --config-file=pyproject.toml`.
+The mypy version is pinned to `2.3.1` in the dev dependencies.
+
+CI runs the same Makefile target in two cells: Python 3.10 / SQLAlchemy 2.0.53
+and Python 3.13 / SQLAlchemy 2.1.1. Both cells are blocking: the required
+`matrix-result` check fails if the type-check job fails, is cancelled or is
+skipped. Ruff and the existing offline tests with 95% minimum coverage also
+remain required. To choose a virtualenv interpreter locally, use
+`make typecheck PYTHON=/path/to/venv/bin/python`.
 
 ### Offline Tests (No Database Required)
 
