@@ -68,7 +68,7 @@
 
 ## 예외 계층
 
-CUBRIDdb는 PEP 249 대비 **제한된** 예외 계층을 노출합니다:
+CUBRIDdb 11.3.0.51(모듈 `_cubrid`)은 `Warning`을 제외한 모든 PEP 249 예외 클래스를 제공합니다:
 
 ```mermaid
 graph TD
@@ -76,17 +76,25 @@ graph TD
     exc --> err["CUBRIDdb.Error (Base DBAPI error)"]
     err --> iface["CUBRIDdb.InterfaceError (Driver-level errors)"]
     err --> db["CUBRIDdb.DatabaseError (Server-level errors)"]
-    err --> ns["CUBRIDdb.NotSupportedError (Unsupported operations)"]
+    db --> data["CUBRIDdb.DataError"]
+    db --> op["CUBRIDdb.OperationalError"]
+    db --> integ["CUBRIDdb.IntegrityError"]
+    db --> internal["CUBRIDdb.InternalError"]
+    db --> prog["CUBRIDdb.ProgrammingError"]
+    db --> ns["CUBRIDdb.NotSupportedError (Unsupported operations)"]
 ```
 
-**누락된 PEP 249 예외** (드라이버가 제공하지 않음):
-- `OperationalError` — `DatabaseError`에 흡수됨
-- `ProgrammingError` — `DatabaseError`에 흡수됨
-- `InternalError` — `DatabaseError`에 흡수됨
-- `DataError` — `DatabaseError`에 흡수됨
-- `IntegrityError` — `DatabaseError`에 흡수됨
+서버 오류가 어떤 클래스가 되는지는 드라이버의 오류 코드 매핑이 결정합니다. CUBRID 11.4에서 관찰한 결과:
 
-즉, 모든 데이터베이스 수준 오류(제약 위반, 구문 오류, 연결 문제)가 `DatabaseError`로 발생합니다. `sqlalchemy-cubrid` 방언은 연결 해제 오류를 다른 실패와 구별하기 위해 **문자열 기반 메시지 매칭**을 사용합니다.
+| 오류 (네이티브 코드) | CUBRIDdb 클래스 |
+|---|---|
+| 구문 오류 또는 알 수 없는 테이블 (-493) | `ProgrammingError` |
+| NOT NULL (-631), 외래 키 (-922), 고유 (-670) | `IntegrityError` |
+| 0으로 나누기 (-494) | `IntegrityError` |
+| 실패한 `CAST` (-181) | `DatabaseError` |
+| `rollback()` 이후 결과 읽기 (CCI -20040) | `InterfaceError` |
+
+SQLAlchemy는 전달받은 클래스를 감싸므로 `cubrid://`는 제약 위반에 `sqlalchemy.exc.IntegrityError`를 발생시킵니다. pycubrid는 [알려진 문제 9](#9-릴리스된-pycubrid의-not-null--외래-키-위반)를 참고하세요. `sqlalchemy-cubrid` 방언은 연결 해제 오류를 다른 실패와 구별하기 위해 **문자열 기반 메시지 매칭**을 사용합니다.
 
 ---
 
@@ -119,9 +127,9 @@ except CUBRIDdb.DatabaseError as e:
 
 ## 알려진 문제
 
-### 1. 연결 해제 감지를 위한 `OperationalError` 없음
+### 1. 연결 해제 감지에 `OperationalError`를 사용하지 않음
 
-드라이버가 `OperationalError`를 제공하지 않으므로, 방언은 MySQL 방언처럼 `isinstance(e, dbapi.OperationalError)`를 쓸 수 없습니다. 대신:
+CUBRIDdb 11.3.0.51은 `OperationalError`를 정의하지만([예외 계층](#예외-계층) 참고), 방언의 `is_disconnect()`는 예외 클래스로 연결 해제를 분류하지 않습니다. 대신:
 - 알려진 연결 해제 메시지 15종에 대한 문자열 패턴 매칭
 - CCI 통신 오류에 대한 숫자 오류 코드 매칭
 
@@ -189,6 +197,18 @@ SQLAlchemy를 통하면 `text()` 및 Core `UPDATE`/`DELETE` executemany가 잘�
 | `cubrid+aiopycubrid://` | 모든 행: `AsyncConnection.execute()`가 반환 전에 전체 결과를 버퍼링 | 모든 행 |
 
 cubrid-lab/pycubrid#395는 pycubrid가 부분 결과를 반환하는 대신 `InterfaceError`를 발생시키도록 합니다. 해당 릴리스를 채택하기 전까지는 트랜잭션을 끝내기 전에 결과를 모두 소비하세요. 방언이 서버 측 커서를 지원하지 않으므로 `AsyncConnection.stream()`은 사용할 수 없습니다.
+
+### 9. 릴리스된 pycubrid의 NOT NULL / 외래 키 위반
+
+CUBRID 10.2 및 11.4에서 실제로 검증했습니다(#480). SQLAlchemy는 전달받은 DB-API 예외 클래스를 그대로 감싸므로, SQLAlchemy 예외 클래스는 드라이버에 따라 달라집니다:
+
+| 위반 (네이티브 코드) | `cubrid://` (`CUBRIDdb` 11.3) | `cubrid+pycubrid://` / `cubrid+aiopycubrid://` (pycubrid 1.7.1) |
+|---|---|---|
+| NOT NULL (-631) | `IntegrityError` | `DatabaseError` |
+| 외래 키 (-922) | `IntegrityError` | `DatabaseError` |
+| 고유 / 기본 키 (-670) | `IntegrityError` | `IntegrityError` |
+
+cubrid-lab/pycubrid#390을 수정한 pycubrid 릴리스를 채택하기 전까지, pycubrid를 통한 NOT NULL 및 외래 키 실패는 `sqlalchemy.exc.DatabaseError`(`IntegrityError`의 기반 클래스)로 잡으세요. 방언은 의도적으로 메시지 기반으로 예외를 재분류하지 않습니다. 모든 드라이버에서 `rollback()` 후 연결이나 `Session`을 계속 사용할 수 있습니다.
 
 ---
 
