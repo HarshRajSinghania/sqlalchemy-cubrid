@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import os
+from decimal import Decimal
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from typing import Any, Protocol, cast
 from unittest.mock import patch
@@ -15,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engin
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from sqlalchemy_cubrid import BLOB, CLOB
+from sqlalchemy_cubrid import BLOB, CLOB, DOUBLE, MULTISET, SEQUENCE, SET
 
 from scripts.integration_urls import async_url
 from test.pycubrid_upstream import xfail_unreleased_pycubrid_fix
@@ -858,3 +860,151 @@ class TestAsyncIntegrityErrorContract:
         # Only the class check is gated; the checks above never are.
         _xfail_async_integrity(request, engine.dialect.driver, kind)
         _assert_integrity_error(engine, excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# #482: the cursor.description subset observable through SQLAlchemy
+# ---------------------------------------------------------------------------
+
+# column -> (SQLAlchemy type, nullable, CUBRID type code); same expectations as
+# the sync pycubrid lane in test_integration.py.
+_DESC_COLUMNS: dict[str, tuple[Any, bool, int]] = {
+    "id": (Integer, False, 8),
+    "nn": (String(20), False, 2),
+    "nl": (String(20), True, 2),
+    "bi": (sa.BigInteger, True, 21),
+    "n": (sa.Numeric(10, 2), True, 7),
+    "d": (DOUBLE, True, 12),
+    "dt": (sa.Date, True, 13),
+    "ts": (sa.TIMESTAMP, True, 15),
+}
+_DESC_ROW: dict[str, Any] = {
+    "id": 1,
+    "nn": "a",
+    "nl": None,
+    "bi": 2,
+    "n": Decimal("3.50"),
+    "d": 1.5,
+    "dt": datetime.date(2020, 1, 2),
+    "ts": datetime.datetime(2020, 1, 2, 3, 4, 5),
+}
+# column -> (collection type, pycubrid type code: SET 16, MULTISET 17, SEQUENCE 18).
+_DESC_COLLECTIONS: dict[str, tuple[Any, int]] = {
+    "s": (SET, 16),
+    "ms": (MULTISET, 17),
+    "sq": (SEQUENCE, 18),
+}
+# CUBRID collection literals cannot be bound as parameters portably (#484).
+_DESC_COLLECTION_ROW = text(
+    "INSERT INTO aio_test_cd482_coll (id, s, ms, sq) VALUES (1, {1,2}, {1,1}, {2,1})"
+)
+_DESC_TEXTUAL = text("SELECT id, nn AS alias, bi + 1 AS expr, 1 + 1 FROM aio_test_cd482")
+
+_desc_metadata = MetaData()
+_desc_table = Table(
+    "aio_test_cd482",
+    _desc_metadata,
+    *(
+        Column(name, type_, primary_key=name == "id", autoincrement=False, nullable=nullable)
+        for name, (type_, nullable, _) in _DESC_COLUMNS.items()
+    ),
+)
+_desc_collections = Table(
+    "aio_test_cd482_coll",
+    _desc_metadata,
+    Column("id", Integer, primary_key=True, autoincrement=False),
+    *(Column(name, kind(Integer())) for name, (kind, _) in _DESC_COLLECTIONS.items()),
+)
+
+
+def _description(result: sa.CursorResult[Any]) -> list[tuple[Any, ...]]:
+    assert result.cursor is not None and result.cursor.description is not None
+    return [tuple(d) for d in result.cursor.description]
+
+
+class TestAsyncCursorDescriptionContract:
+    @pytest_asyncio.fixture(autouse=True)
+    async def _description_tables(self, engine: AsyncEngine) -> AsyncIterator[None]:
+        async with engine.begin() as conn:
+            await conn.run_sync(_desc_metadata.drop_all)
+            await conn.run_sync(_desc_metadata.create_all)
+            _ = await conn.execute(_desc_table.insert(), _DESC_ROW)
+            _ = await conn.execute(_DESC_COLLECTION_ROW)
+        yield
+        async with engine.begin() as conn:
+            await conn.run_sync(_desc_metadata.drop_all)
+
+    async def test_textual_sql_column_names(self, engine: AsyncEngine):
+        async with engine.connect() as conn:
+            result = await conn.execute(_DESC_TEXTUAL)
+            names = [d[0] for d in _description(result)]
+            keys = list(result.keys())
+            row = result.one()
+        assert names == keys == ["id", "alias", "expr", "1+1"]
+        assert row._mapping["alias"] == "a" and row.expr == 3
+
+    async def test_core_select_keys_match_description(self, engine: AsyncEngine):
+        async with engine.connect() as conn:
+            reflected = await conn.run_sync(
+                lambda sync_conn: Table("aio_test_cd482", MetaData(), autoload_with=sync_conn)
+            )
+            result = await conn.execute(select(reflected))
+            names = [d[0] for d in _description(result)]
+            assert list(result.keys()) == names == list(_DESC_COLUMNS)
+
+    async def test_scalar_type_codes(self, engine: AsyncEngine):
+        async with engine.connect() as conn:
+            result = await conn.execute(select(_desc_table))
+            codes = {d[0]: d[1] for d in _description(result)}
+        assert codes == {name: spec[2] for name, spec in _DESC_COLUMNS.items()}
+
+    async def test_null_ok(self, request: pytest.FixtureRequest, engine: AsyncEngine):
+        async with engine.connect() as conn:
+            result = await conn.execute(select(_desc_table))
+            null_ok = {d[0]: bool(d[6]) for d in _description(result)}
+        # Released pycubrid reports null_ok inverted (NOT NULL -> True).
+        xfail_unreleased_pycubrid_fix(request, engine.dialect.driver, 431, raises=AssertionError)
+        assert null_ok == {name: spec[1] for name, spec in _DESC_COLUMNS.items()}
+
+    async def test_reflected_nullability_uses_catalog(self, engine: AsyncEngine):
+        """Reflection reads nullability from the catalog, not cursor.description."""
+        async with engine.connect() as conn:
+            columns = await conn.run_sync(
+                lambda sync_conn: sa.inspect(sync_conn).get_columns("aio_test_cd482")
+            )
+        nullable = {c["name"]: c["nullable"] for c in columns}
+        assert nullable == {name: spec[1] for name, spec in _DESC_COLUMNS.items()}
+
+    async def test_collection_type_codes(self, request: pytest.FixtureRequest):
+        # A dedicated engine keeps any broken connection out of the shared pool:
+        # released pycubrid misreads the collection column header.
+        engine = create_async_engine(_async_url())
+        try:
+            async with engine.connect() as conn:
+                # Released pycubrid reports the element type code (INTEGER 8).
+                xfail_unreleased_pycubrid_fix(
+                    request, engine.dialect.driver, 430, raises=AssertionError
+                )
+                result = await conn.execute(
+                    select(*(_desc_collections.c[name] for name in _DESC_COLLECTIONS))
+                )
+                codes = {d[0]: d[1] for d in _description(result)}
+                assert len(result.all()) == 1
+            assert codes == {name: spec[1] for name, spec in _DESC_COLLECTIONS.items()}
+        finally:
+            await engine.dispose()
+
+    async def test_sync_and_async_descriptions_agree(self, engine: AsyncEngine):
+        """Names, type codes and null_ok match the sync pycubrid dialect."""
+        async with engine.connect() as conn:
+            result = await conn.execute(select(_desc_table))
+            async_desc = [(d[0], d[1], bool(d[6])) for d in _description(result)]
+        sync_engine = sa.create_engine(_async_url().set(drivername="cubrid+pycubrid"))
+        try:
+            with sync_engine.connect() as sync_conn:
+                sync_result = sync_conn.execute(select(_desc_table))
+                sync_desc = [(d[0], d[1], bool(d[6])) for d in _description(sync_result)]
+                sync_result.all()
+        finally:
+            sync_engine.dispose()
+        assert async_desc == sync_desc
