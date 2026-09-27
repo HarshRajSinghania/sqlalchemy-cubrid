@@ -195,7 +195,7 @@ from sqlalchemy import create_engine
 engine = create_engine("cubrid://dba:password@localhost:33000/demodb")
 ```
 
-对于纯 Python 驱动（无需 C 构建）：`create_engine("cubrid+pycubrid://dba@localhost:33000/demodb")`
+对于纯 Python 驱动（无需 CUBRID 原生库）：`create_engine("cubrid+pycubrid://dba@localhost:33000/demodb")`。`[pycubrid]` extra 中的 `greenlet` 在没有兼容 wheel 时可能需要构建工具。
 
 ### sqlalchemy-cubrid 支持 SQLAlchemy 2.0–2.1 吗？
 
@@ -222,7 +222,7 @@ stmt = insert(users).values(name="Alice").on_duplicate_key_update(name="Alice Up
 
 ### `cubrid://` 和 `cubrid+pycubrid://` 有什么区别？
 
-`cubrid://` 使用需要编译的 C 扩展驱动（CUBRIDdb）。`cubrid+pycubrid://` 使用纯 Python 驱动，只需 pip 即可安装 —— 无需构建工具。`cubrid+aiopycubrid://` 使用纯 Python 驱动的异步变体，可与 `create_async_engine` 和 `AsyncSession` 一起使用。
+`cubrid://` 使用需要编译的 C 扩展驱动（CUBRIDdb）。`cubrid+pycubrid://` 使用无需 CUBRID 原生库的纯 Python 驱动。`[pycubrid]` extra 包含 `greenlet`，没有兼容 wheel 时可能需要构建工具。`cubrid+aiopycubrid://` 使用纯 Python 驱动的异步变体，可与 `create_async_engine` 和 `AsyncSession` 一起使用。
 
 ### sqlalchemy-cubrid 支持 async 吗？
 

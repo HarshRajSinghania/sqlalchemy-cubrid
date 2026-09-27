@@ -196,7 +196,7 @@ from sqlalchemy import create_engine
 engine = create_engine("cubrid://dba:password@localhost:33000/demodb")
 ```
 
-Pure Python driver के लिए (C build की आवश्यकता नहीं): `create_engine("cubrid+pycubrid://dba@localhost:33000/demodb")`
+Pure Python driver के लिए (CUBRID native libraries की आवश्यकता नहीं): `create_engine("cubrid+pycubrid://dba@localhost:33000/demodb")`। `[pycubrid]` extra की `greenlet` dependency के लिए compatible wheel उपलब्ध न होने पर build tools आवश्यक हो सकते हैं।
 
 ### क्या sqlalchemy-cubrid SQLAlchemy 2.0–2.1 को सपोर्ट करता है?
 
@@ -223,7 +223,7 @@ stmt = insert(users).values(name="Alice").on_duplicate_key_update(name="Alice Up
 
 ### `cubrid://` और `cubrid+pycubrid://` में क्या अंतर है?
 
-`cubrid://` C-extension driver (CUBRIDdb) का उपयोग करता है जिसे compilation की आवश्यकता होती है। `cubrid+pycubrid://` pure Python driver का उपयोग करता है जो केवल pip से install हो जाता है — किसी build tool की आवश्यकता नहीं। `cubrid+aiopycubrid://` pure Python driver के async variant का उपयोग करता है, जो `create_async_engine` और `AsyncSession` के साथ काम करता है।
+`cubrid://` C-extension driver (CUBRIDdb) का उपयोग करता है जिसे compilation की आवश्यकता होती है। `cubrid+pycubrid://` pure Python driver का उपयोग करता है जिसे CUBRID native libraries की आवश्यकता नहीं है। `[pycubrid]` extra में `greenlet` शामिल है; compatible wheel उपलब्ध न होने पर build tools आवश्यक हो सकते हैं। `cubrid+aiopycubrid://` pure Python driver के async variant का उपयोग करता है, जो `create_async_engine` और `AsyncSession` के साथ काम करता है।
 
 ### क्या sqlalchemy-cubrid async को सपोर्ट करता है?
 

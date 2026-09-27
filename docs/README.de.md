@@ -197,7 +197,7 @@ from sqlalchemy import create_engine
 engine = create_engine("cubrid://dba:password@localhost:33000/demodb")
 ```
 
-Für den Pure-Python-Treiber (kein C-Build erforderlich): `create_engine("cubrid+pycubrid://dba@localhost:33000/demodb")`
+Für den Pure-Python-Treiber (keine nativen CUBRID-Bibliotheken erforderlich): `create_engine("cubrid+pycubrid://dba@localhost:33000/demodb")`. Die `greenlet`-Abhängigkeit des `[pycubrid]`-Extras benötigt möglicherweise Build-Werkzeuge, wenn kein kompatibles Wheel verfügbar ist.
 
 ### Unterstützt sqlalchemy-cubrid SQLAlchemy 2.0–2.1?
 
@@ -224,7 +224,7 @@ stmt = insert(users).values(name="Alice").on_duplicate_key_update(name="Alice Up
 
 ### Was ist der Unterschied zwischen `cubrid://` und `cubrid+pycubrid://`?
 
-`cubrid://` verwendet den C-Erweiterungstreiber (CUBRIDdb), der eine Kompilierung erfordert. `cubrid+pycubrid://` verwendet den Pure-Python-Treiber, der allein mit pip installiert wird — ohne Build-Werkzeuge. `cubrid+aiopycubrid://` verwendet die asynchrone Variante des Pure-Python-Treibers für die Verwendung mit `create_async_engine` und `AsyncSession`.
+`cubrid://` verwendet den C-Erweiterungstreiber (CUBRIDdb), der eine Kompilierung erfordert. `cubrid+pycubrid://` verwendet den Pure-Python-Treiber ohne native CUBRID-Bibliotheken. Das `[pycubrid]`-Extra enthält `greenlet`; ohne kompatibles Wheel werden möglicherweise Build-Werkzeuge benötigt. `cubrid+aiopycubrid://` verwendet die asynchrone Variante des Pure-Python-Treibers für die Verwendung mit `create_async_engine` und `AsyncSession`.
 
 ### Unterstützt sqlalchemy-cubrid Async?
 
