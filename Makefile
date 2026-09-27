@@ -7,6 +7,7 @@ MYPY = $(PYTHON) -m mypy
 BANDIT = bandit
 SRC = sqlalchemy_cubrid
 TESTS = test
+LINT_PATHS = $(SRC) $(TESTS) scripts demos samples docs/source
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -20,12 +21,12 @@ check-tool-versions: ## Detect local and CI tool-version drift
 	$(PYTHON) scripts/check_tool_versions.py
 
 lint: check-tool-versions ## Run linter and format checks
-	$(RUFF) check $(SRC)/ $(TESTS)/
-	$(RUFF) format --check $(SRC)/ $(TESTS)/
+	$(RUFF) check $(LINT_PATHS)
+	$(RUFF) format --check $(LINT_PATHS)
 
 format: ## Auto-fix lint issues and format code
-	$(RUFF) check --fix $(SRC)/ $(TESTS)/
-	$(RUFF) format $(SRC)/ $(TESTS)/
+	$(RUFF) check --fix $(LINT_PATHS)
+	$(RUFF) format $(LINT_PATHS)
 
 typecheck: ## Run mypy type checking
 	$(PYTHON) -c 'import platform; from importlib.metadata import version; print("Python:", platform.python_version()); [print(name + ":", version(name)) for name in ("SQLAlchemy", "alembic", "mypy")]'

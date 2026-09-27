@@ -19,6 +19,7 @@ def tooling_config(tmp_path: Path) -> Path:
         "pyproject.toml",
         ".pre-commit-config.yaml",
         "tox.ini",
+        "Makefile",
         ".github/workflows/ci.yml",
     ):
         target = tmp_path / name
@@ -57,3 +58,24 @@ def test_expanded_ruff_cli_scope_is_detected(tooling_config: Path) -> None:
     config = tooling_config / "pyproject.toml"
     config.write_text(config.read_text().replace('["*.py", "*.pyi"]', '["*.py", "*.pyi", "*.md"]'))
     assert any("Ruff CLI file scope" in error for error in check(tooling_config))
+
+
+def test_omitted_maintained_source_directory_is_detected(tooling_config: Path) -> None:
+    config = tooling_config / "Makefile"
+    config.write_text(
+        config.read_text().replace(
+            " scripts demos samples docs/source", " scripts demos docs/source"
+        )
+    )
+    assert any(
+        "all maintained Python source directories" in error for error in check(tooling_config)
+    )
+
+
+@pytest.mark.parametrize("surface", ["tox.ini", ".github/workflows/ci.yml"])
+def test_lint_target_drift_is_detected(tooling_config: Path, surface: str) -> None:
+    config = tooling_config / surface
+    config.write_text(
+        config.read_text().replace("make lint", "ruff check sqlalchemy_cubrid/ test/")
+    )
+    assert any("shared Makefile lint target" in error for error in check(tooling_config))

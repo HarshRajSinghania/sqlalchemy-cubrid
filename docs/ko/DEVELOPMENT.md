@@ -389,20 +389,11 @@ make test
 ### 검사 실행
 
 ```bash
-# 린트 검사
-ruff check sqlalchemy_cubrid/ test/
-
-# 린트 문제 자동 수정
-ruff check --fix sqlalchemy_cubrid/ test/
-
-# 포맷 검사
-ruff format --check sqlalchemy_cubrid/ test/
-
-# 포맷 적용
-ruff format sqlalchemy_cubrid/ test/
-
-# make로 전체 검사
+# 도구 일관성과 유지보수 대상 Python 소스 전체의 린트/포맷 검사
 make lint
+
+# 같은 공통 소스 경로에 수정과 포맷 적용
+make format
 ```
 
 ---
@@ -419,6 +410,11 @@ Ruff/mypy 버전의 기준은 `pyproject.toml`의 개발 의존성 핀입니다.
 임포트를 무시하지 않습니다. Ruff의 명시적 `include = ["*.py", "*.pyi"]`와 동일한
 훅 타입 설정으로 CLI, CI, 훅 모두 Python 소스를 다루며 문서의 코드 스니펫을 다시
 작성하지 않습니다.
+
+Makefile의 공통 `LINT_PATHS`는 패키지, 테스트, 스크립트, 데모, 샘플,
+`docs/source`의 Python 설정을 포함합니다. CI와 tox는 `make lint`를 실행하고,
+훅은 계속 모든 추적된 Python/pyi 파일을 검사합니다. 일관성 검사는 유지보수 대상
+디렉터리 누락이나 공통 타깃을 우회하는 실행 설정을 거부합니다.
 
 도구 핀을 바꿀 때는 같은 변경에서 pre-commit 리비전과 tox 핀도 갱신하세요. 필요한
 경우 CI의 mypy 핀도 갱신합니다. `scripts/check_tool_versions.py`는 SQLAlchemy 타입

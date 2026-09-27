@@ -399,20 +399,11 @@ formatting.
 ### Running Checks
 
 ```bash
-# Lint check
-ruff check sqlalchemy_cubrid/ test/
-
-# Auto-fix lint issues
-ruff check --fix sqlalchemy_cubrid/ test/
-
-# Format check
-ruff format --check sqlalchemy_cubrid/ test/
-
-# Apply formatting
-ruff format sqlalchemy_cubrid/ test/
-
-# All checks via make
+# Check tooling consistency and lint/format all maintained Python sources
 make lint
+
+# Apply fixes and formatting over the same shared source paths
+make format
 ```
 
 ---
@@ -430,6 +421,12 @@ with the project's strict configuration. It does not install stubs automatically
 suppress missing imports. Ruff's explicit `include = ["*.py", "*.pyi"]` and
 the matching hook types keep CLI, CI and hooks on Python sources rather than
 rewriting documentation snippets.
+
+The shared `LINT_PATHS` in the Makefile covers the package, tests, scripts,
+demos, samples and `docs/source` Python configuration. CI and tox invoke
+`make lint`; the hooks keep checking all tracked Python/pyi files. The drift
+checker rejects omitted maintained directories or a runner that bypasses this
+shared target.
 
 When updating a tool pin, update its pre-commit revision and tox pin in the same
 change; update the CI mypy pin when applicable. SQLAlchemy type-check pairs are
