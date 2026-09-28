@@ -1250,6 +1250,118 @@ class TestCreateIndexIfNotExistsIntegration:
             meta.drop_all(engine)
 
 
+class TestMixedCaseExistenceIntegration:
+    """#543: CUBRID stores quoted mixed-case names in lower case."""
+
+    def test_has_table_and_has_index(self, engine):
+        meta = MetaData()
+        t = Table("Users543", meta, Column("id", Integer, primary_key=True), Column("v", Integer))
+        sa.Index("IX_Mixed543", t.c.v)
+        meta.drop_all(engine)
+        meta.create_all(engine)
+        try:
+            insp = inspect(engine)
+            assert insp.has_table("Users543")
+            assert insp.has_table("users543")
+            assert not insp.has_table("Missing543")
+            assert insp.has_index("Users543", "IX_Mixed543")
+            assert insp.has_index("users543", "ix_mixed543")
+            assert not insp.has_index("Users543", "IX_Missing543")
+            assert not insp.has_index("Missing543", "IX_Mixed543")
+        finally:
+            meta.drop_all(engine)
+        insp = inspect(engine)
+        assert not insp.has_table("Users543")
+        assert not insp.has_index("Users543", "IX_Mixed543")
+
+    def test_checkfirst_create_and_drop(self, engine):
+        meta = MetaData()
+        t = Table("Users543Cf", meta, Column("id", Integer, primary_key=True), Column("v", Integer))
+        idx = sa.Index("IX_Mixed543Cf", t.c.v)
+        meta.drop_all(engine)
+        try:
+            t.create(engine, checkfirst=True)
+            # has_table finds the lower-case stored table: no second CREATE.
+            t.create(engine, checkfirst=True)
+            # create_all creates the table's indexes with it.
+            assert inspect(engine).has_index("Users543Cf", "IX_Mixed543Cf")
+            idx.create(engine, checkfirst=True)
+            idx.drop(engine, checkfirst=True)
+            # Before #543 checkfirst saw no index and silently skipped the drop.
+            assert not inspect(engine).has_index("Users543Cf", "IX_Mixed543Cf")
+            idx.drop(engine, checkfirst=True)
+            idx.create(engine, checkfirst=True)
+            assert inspect(engine).has_index("Users543Cf", "IX_Mixed543Cf")
+            t.drop(engine, checkfirst=True)
+            assert not inspect(engine).has_table("Users543Cf")
+            t.drop(engine, checkfirst=True)
+        finally:
+            meta.drop_all(engine)
+
+
+class TestHasIndexOwnerPreference:
+    """#543 review: since CUBRID 11.2 classes of different owners may share a
+    name. ``has_index`` answers for the current user's own class, like
+    ``_get_class_type``, and only falls back to another owner's class when the
+    current user has none. Checked as DBA: a non-DBA user cannot read
+    ``_db_index`` yet (#549)."""
+
+    @pytest.fixture
+    def u543_engine(self, engine):
+        if engine.url.username is None or engine.url.username.lower() != "dba":
+            pytest.skip("needs a DBA connection to create a user")
+        if not _server_at_least(engine, (11, 2)):
+            pytest.skip("CUBRID < 11.2 has one global namespace for class names")
+
+        def run(eng, *statements, ignore_errors=False):
+            with eng.connect() as conn:
+                for statement in statements:
+                    try:
+                        conn.exec_driver_sql(statement)
+                    except Exception:
+                        if not ignore_errors:
+                            raise
+                        conn.rollback()
+                conn.commit()
+
+        u543 = create_engine(engine.url.set(username="u543", password=None))
+
+        def cleanup():
+            run(u543, 'DROP TABLE "Own543"', ignore_errors=True)
+            u543.dispose()
+            run(engine, 'DROP TABLE "Own543"', "DROP USER u543", ignore_errors=True)
+
+        run(engine, "CREATE USER u543", ignore_errors=True)
+        cleanup()
+        run(engine, "CREATE USER u543")
+        try:
+            run(engine, 'CREATE TABLE "Own543" (id INT PRIMARY KEY, v INT)')
+            run(
+                u543,
+                'CREATE TABLE "Own543" (id INT PRIMARY KEY, v INT)',
+                'CREATE INDEX "IX_Other543" ON "Own543" (v)',
+            )
+            yield u543
+        finally:
+            cleanup()
+
+    def test_has_index_prefers_the_current_users_class(self, engine, u543_engine):
+        with engine.connect() as conn:
+            owners = conn.execute(
+                text("SELECT owner_name FROM db_class WHERE class_name = 'own543'")
+            ).fetchall()
+            assert sorted(owners) == [("DBA",), ("U543",)]
+
+            # Only the other owner's same-named class has the index.
+            assert inspect(conn).has_table("Own543")
+            assert not inspect(conn).has_index("Own543", "IX_Other543")
+
+            # Once the current user's class is gone, the other owner's is used.
+            conn.exec_driver_sql('DROP TABLE "Own543"')
+            conn.commit()
+            assert inspect(conn).has_index("Own543", "IX_Other543")
+
+
 class TestUnicodeTextIntegration:
     """#534: ``UnicodeText`` creates a CUBRID STRING column (CUBRID has no TEXT)."""
 
