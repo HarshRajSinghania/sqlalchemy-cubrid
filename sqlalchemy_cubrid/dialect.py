@@ -28,12 +28,13 @@ import warnings
 from typing import Any, Callable, Optional, Sequence, cast
 
 from sqlalchemy import types as sqltypes
-from sqlalchemy.exc import NoSuchTableError
+from sqlalchemy.exc import ArgumentError, NoSuchTableError
 from sqlalchemy.engine import default, reflection
 from sqlalchemy.engine.interfaces import (
     DBAPIConnection,
     BindTyping,
     ConnectArgsType,
+    IsolationLevel,
     ReflectedCheckConstraint,
     ReflectedColumn,
     ReflectedForeignKeyConstraint,
@@ -340,7 +341,20 @@ class CubridDialect(default.DefaultDialect):
         no_backslash_escapes: bool = True,
         **kwargs: Any,
     ) -> None:
-        super().__init__(**kwargs)
+        if isolation_level is not None:
+            if not isinstance(isolation_level, str):
+                raise ArgumentError(
+                    f"isolation_level must be a string such as 'SERIALIZABLE' or "
+                    f"'AUTOCOMMIT', got {isolation_level!r}"
+                )
+            # SQLAlchemy applies the engine-level level on connect and restores
+            # it on pool checkin, asserting that it equals the level read back
+            # at first connect, so pass the canonical spelling of an alias.
+            name = isolation_level.replace("_", " ").upper()
+            code = self._ISOLATION_LEVEL_MAP.get(name)
+            isolation_level = self._ISOLATION_LEVEL_REVERSE[code] if code is not None else name
+        # An unknown name is passed through so SQLAlchemy raises ArgumentError.
+        super().__init__(isolation_level=cast(Optional[IsolationLevel], isolation_level), **kwargs)
         self.isolation_level = isolation_level
         self._json_serializer = json_serializer
         self._json_deserializer = json_deserializer
@@ -1061,16 +1075,14 @@ class CubridDialect(default.DefaultDialect):
         """Return a callable to set up a new DBAPI connection.
 
         Disables autocommit on the CUBRID driver so that
-        SQLAlchemy can manage transactions properly.
+        SQLAlchemy can manage transactions properly. SQLAlchemy applies an
+        engine-level ``isolation_level`` itself, after this hook.
         """
-        isolation_level = self.isolation_level
 
         def connect(conn: Any) -> None:
             # CUBRID Python driver defaults to autocommit=True;
             # SA manages transactions, so we turn it off.
             conn.set_autocommit(False)
-            if isolation_level is not None:
-                self.set_isolation_level(conn, isolation_level)
 
         return connect
 
@@ -1171,6 +1183,7 @@ class CubridDialect(default.DefaultDialect):
             "READ COMMITTED",
             "REPEATABLE READ SCHEMA, READ COMMITTED INSTANCES",
             "CURSOR STABILITY",
+            "AUTOCOMMIT",
         ]
 
     def set_isolation_level(
@@ -1178,7 +1191,17 @@ class CubridDialect(default.DefaultDialect):
         dbapi_connection: DBAPIConnection,
         level: str,
     ) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
-        """Set the isolation level for *dbapi_conn*."""
+        """Set the isolation level for *dbapi_conn*.
+
+        ``AUTOCOMMIT`` turns on the driver's autocommit mode. Any other level
+        turns it off (if on) and runs ``SET TRANSACTION ISOLATION LEVEL``.
+        All three drivers (CUBRIDdb, pycubrid and the async adapter) expose an
+        ``autocommit`` property.
+        """
+        if level.upper() == "AUTOCOMMIT":
+            if not dbapi_connection.autocommit:  # pyright: ignore[reportAttributeAccessIssue]
+                dbapi_connection.autocommit = True  # pyright: ignore[reportAttributeAccessIssue]
+            return
         # Note: do NOT unwrap dbapi_conn.connection — the inner C-level
         # _cubrid.connection cursor cannot handle SET TRANSACTION SQL.
         # SA already passes the correct Python-level CUBRIDdb.connections.Connection.
@@ -1187,8 +1210,10 @@ class CubridDialect(default.DefaultDialect):
         if numeric_level is None:
             raise ValueError(
                 f"Invalid isolation level: {level!r}. "
-                f"Valid values: {list(self._ISOLATION_LEVEL_MAP.keys())}"
+                f"Valid values: {list(self.get_isolation_level_values())}"
             )
+        if dbapi_connection.autocommit:  # pyright: ignore[reportAttributeAccessIssue]
+            dbapi_connection.autocommit = False  # pyright: ignore[reportAttributeAccessIssue]
         cursor = dbapi_connection.cursor()
         try:
             cursor.execute(f"SET TRANSACTION ISOLATION LEVEL {numeric_level}")
@@ -1196,11 +1221,9 @@ class CubridDialect(default.DefaultDialect):
         finally:
             cursor.close()
 
-    def reset_isolation_level(self, dbapi_conn: DBAPIConnection) -> None:
-        """Revert isolation level to the CUBRID default (level 4)."""
-        self.set_isolation_level(
-            dbapi_conn, self._ISOLATION_LEVEL_REVERSE[self._DEFAULT_ISOLATION_CODE]
-        )
+    def detect_autocommit_setting(self, dbapi_conn: DBAPIConnection) -> bool:
+        """Return the driver's autocommit mode (no round trip on any driver)."""
+        return bool(dbapi_conn.autocommit)  # pyright: ignore[reportAttributeAccessIssue]
 
     def do_release_savepoint(self, connection: Any, name: str) -> None:
         """CUBRID does not support RELEASE SAVEPOINT; no-op."""

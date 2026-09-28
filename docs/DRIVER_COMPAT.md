@@ -114,7 +114,7 @@ The dialect relies on these driver-specific APIs:
 |---|---|---|
 | `conn.ping()` | Check connection liveness | `CubridDialect.do_ping()` |
 | `conn.get_last_insert_id()` | Get auto-increment value | `CubridExecutionContext.get_lastrowid()` |
-| `conn.set_autocommit(bool)` | Control autocommit | `CubridDialect.on_connect()` |
+| `conn.set_autocommit(bool)` / `conn.autocommit` | Control autocommit | `CubridDialect.on_connect()`, `set_isolation_level()` (`AUTOCOMMIT` and back), `detect_autocommit_setting()` |
 | `conn.cursor()` | Create cursor | Standard DB-API |
 
 ### Error Code Extraction
@@ -291,8 +291,8 @@ remember the isolation level they set on each connection and re-apply it after
 every commit and rollback. An engine-level `isolation_level` survives commits,
 rollbacks and pool checkins. A connection-level
 `execution_options(isolation_level=...)` survives commits and rollbacks while
-that `Connection` stays open; on checkin the pool resets it (restoring the
-engine level instead of READ COMMITTED is #501). This costs one
+that `Connection` stays open; on checkin SQLAlchemy restores the engine level
+(or the server default when none is configured). This costs one
 `SET TRANSACTION ISOLATION LEVEL` + `COMMIT` per commit/rollback, and only on
 connections with a configured level. Because the re-apply makes pycubrid
 reconnect immediately, reading the rest of a result after `commit()` /
@@ -311,6 +311,16 @@ Session state set with raw SQL (such as `SET @var` or a `SET TRANSACTION`
 statement you run yourself) is still lost after `commit()` / `rollback()` on
 pycubrid. The workaround will be removed once a pycubrid release fixing
 cubrid-lab/pycubrid#468 is the minimum supported version.
+
+**`AUTOCOMMIT` on pycubrid.** In autocommit mode every statement ends a
+transaction, so pycubrid reconnects before each following statement (two
+reconnects per statement were measured on 1.7.1). Statements run at the server
+default isolation level, not at a level set before switching to `AUTOCOMMIT`,
+and session variables are lost between statements. The dialect cannot
+re-apply anything here without adding a statement per statement. With an
+engine-level `AUTOCOMMIT`, `create_engine(..., skip_autocommit_rollback=True)`
+avoids the extra reconnect from the pool's checkin rollback. `CUBRIDdb` keeps
+the session and the level in autocommit mode.
 
 ---
 
