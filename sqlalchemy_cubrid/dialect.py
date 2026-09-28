@@ -659,7 +659,7 @@ class CubridDialect(default.DefaultDialect):
         try:
             quoted = self.identifier_preparer.quote_identifier(table_name)
             result = connection.execute(text(f"SHOW CREATE TABLE {quoted}"))
-            row = result.fetchone()
+            row = result.first()
         except Exception:  # nosec B110 — graceful fallback when DDL unavailable
             log.warning(
                 "SHOW CREATE TABLE failed for %s; foreign keys will be empty",
@@ -750,7 +750,7 @@ class CubridDialect(default.DefaultDialect):
 
         quoted = self.identifier_preparer.quote_identifier(view_name)
         result = connection.execute(text(f"SHOW CREATE VIEW {quoted}"))
-        row = result.fetchone()
+        row = result.first()
         if row is None:
             return ""
         return str(row[1])
@@ -763,8 +763,15 @@ class CubridDialect(default.DefaultDialect):
         schema: str | None = None,
         **kw: Any,
     ) -> list[ReflectedIndex]:
-        """Return index information for *table_name*."""
+        """Return index information for *table_name*.
+
+        A view has no indexes of its own, so an empty list is returned for
+        one (``SHOW INDEXES IN <view>`` lists the base table's indexes).
+        """
         self._raise_if_non_default_schema(schema, table_name)
+
+        if self._get_class_type(connection, table_name, **kw) == "VCLASS":
+            return []
 
         idict: dict[str, ReflectedIndex] = {}
 
@@ -835,6 +842,14 @@ class CubridDialect(default.DefaultDialect):
     ) -> list[ReflectedUniqueConstraint]:
         """Return unique constraints for *table_name*.
 
+        CUBRID implements a ``UNIQUE`` constraint as a unique index and cannot
+        tell it apart from ``CREATE UNIQUE INDEX`` (same ``_db_index`` flags,
+        and ``SHOW CREATE TABLE`` prints both as ``UNIQUE KEY``), so, as in
+        SQLAlchemy's MySQL dialect, every entry is also returned by
+        :meth:`get_indexes` and carries ``duplicates_index`` naming that index.
+        ``Table`` reflection then keeps the unique index and skips the
+        duplicate constraint.
+
         Primary path: query the ``_db_index`` system catalog for unique
         indexes (excluding PK and FK auto-indexes), then resolve column
         names via ``SHOW INDEXES``. Fallback: parse ``SHOW CREATE TABLE``
@@ -892,7 +907,10 @@ class CubridDialect(default.DefaultDialect):
             if index_name in unique_names:
                 constraints.setdefault(index_name, []).append(row[4])
 
-        return [{"name": name, "column_names": cols} for name, cols in constraints.items()]
+        return [
+            {"name": name, "column_names": cols, "duplicates_index": name}
+            for name, cols in constraints.items()
+        ]
 
     def _get_unique_constraints_from_ddl(
         self,
@@ -904,7 +922,7 @@ class CubridDialect(default.DefaultDialect):
         try:
             quoted = self.identifier_preparer.quote_identifier(table_name)
             result = connection.execute(text(f"SHOW CREATE TABLE {quoted}"))
-            row = result.fetchone()
+            row = result.first()
         except Exception:  # nosec B110 — graceful fallback when DDL unavailable
             log.warning(
                 "SHOW CREATE TABLE failed for %s; unique constraints will be empty",
@@ -920,7 +938,13 @@ class CubridDialect(default.DefaultDialect):
             column_names = [
                 col.strip() for col in _RE_BRACKET_IDENT.findall(uc_match.group("cols"))
             ]
-            unique_constraints.append({"name": constraint_name, "column_names": column_names})
+            unique_constraints.append(
+                {
+                    "name": constraint_name,
+                    "column_names": column_names,
+                    "duplicates_index": constraint_name,
+                }
+            )
         return unique_constraints
 
     @reflection.cache
@@ -958,7 +982,7 @@ class CubridDialect(default.DefaultDialect):
             text("SELECT comment FROM db_class WHERE class_name = :name"),
             {"name": table_name},
         )
-        row = result.fetchone()
+        row = result.first()
         return {"text": row[0] if row and row[0] else None}
 
     def get_schema_names(self, connection: Any, **kw: Any) -> list[str]:
@@ -1026,6 +1050,32 @@ class CubridDialect(default.DefaultDialect):
         if not self._schema_is_default(schema):
             qualified = f"{schema}.{object_name}" if schema else object_name
             raise NoSuchTableError(qualified)
+
+    @reflection.cache
+    def _get_class_type(self, connection: Any, name: str, **kw: Any) -> str | None:
+        """Return ``'CLASS'`` (table), ``'VCLASS'`` (view) or ``None`` (missing).
+
+        CUBRID stores identifiers folded to lower case, so a mixed-case *name*
+        also matches its lower-case form, as in ``SHOW COLUMNS IN <name>``.
+        Since CUBRID 11.2 classes of different owners may share a name; the
+        row of the current user's own class wins (it is what ``SHOW ... IN
+        <name>`` resolves to), then a system class, then any other visible
+        class. CUBRID 10.2 class names are global, so there is one row at most.
+        ``info_cache`` is passed through ``**kw``, so an ``Inspector`` looks a
+        name up once.
+        """
+        # .first() closes the result: an open result keeps one of the
+        # connection's server query entries (at most 100, then -830).
+        row = connection.execute(
+            text(
+                "SELECT class_type FROM db_class "
+                "WHERE class_name IN (:name, LOWER(:name)) "
+                "ORDER BY CASE WHEN owner_name = CURRENT_USER THEN 0 "
+                "WHEN is_system_class = 'YES' THEN 1 ELSE 2 END"
+            ),
+            {"name": name},
+        ).first()
+        return str(row[0]) if row is not None and row[0] is not None else None
 
     @reflection.cache
     def has_table(
