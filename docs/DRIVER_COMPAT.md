@@ -280,16 +280,32 @@ remains usable after `rollback()`.
 
 ### 10. pycubrid starts a new session after `commit()` / `rollback()` (dialect re-applies the isolation level)
 
-Verified live on CUBRID 10.2 and 11.4 (#505). After the driver's `commit()` or
-`rollback()`, the broker returns the CAS status byte as inactive (out of
-transaction). pycubrid 1.7.1 (and `main`) treats that as a released CAS and
-opens a new broker connection before the next request. The new session starts
-at the server default isolation level (READ COMMITTED), and session variables
-are gone. pycubrid restores only `autocommit`. `CUBRIDdb` keeps the same
-session, and an SQL `COMMIT` statement does not trigger the reconnect. Reported
-upstream as cubrid-lab/pycubrid#468.
+**Fixed in pycubrid 1.8.0** (cubrid-lab/pycubrid#468, #472). Before 1.8.0,
+after the driver's `commit()` or `rollback()`, the broker returned the CAS
+status byte as inactive (out of transaction), and pycubrid (1.7.1 and earlier)
+treated that as a released CAS and unconditionally opened a new broker
+connection before the next request; the new session started at the server
+default isolation level (READ COMMITTED), session variables were gone, and
+pycubrid restored only `autocommit`. Verified live on CUBRID 10.2 and 11.4
+(#505). pycubrid 1.8.0 instead keeps the CAS session across `commit()` /
+`rollback()`: it probes the CAS with `CHECK_CAS` and only reconnects when the
+broker actually dropped the connection (for example a CAS restart or broker
+reset), not on every commit/rollback. `CUBRIDdb` has always kept the same
+session, and an SQL `COMMIT` statement does not trigger a reconnect on either
+driver.
 
-**Dialect workaround.** `cubrid+pycubrid://` and `cubrid+aiopycubrid://`
+**Residual case.** Even on pycubrid 1.8.0, a real CAS restart (the broker
+process restarting or resetting the CAS) still opens a new session at the
+server default isolation level and loses session state such as
+`SET TIME ZONE` or other session variables. The workaround below does not
+cover this case: it re-applies the level only right after a commit or
+rollback, so if the CAS restarts while a connection sits idle in the pool,
+the next transaction runs at the server default level. Set the isolation
+level server-side (`isolation_level` in `cubrid.conf`) if it must
+survive CAS restarts.
+
+**Dialect workaround (kept for pycubrid < 1.8.0, and harmless on 1.8.0+).**
+`cubrid+pycubrid://` and `cubrid+aiopycubrid://`
 remember the isolation level they set on each connection and re-apply it after
 every commit and rollback. An engine-level `isolation_level` survives commits,
 rollbacks and pool checkins. A connection-level
@@ -297,11 +313,11 @@ rollbacks and pool checkins. A connection-level
 that `Connection` stays open; on checkin SQLAlchemy restores the engine level
 (or the server default when none is configured). This costs one
 `SET TRANSACTION ISOLATION LEVEL` + `COMMIT` per commit/rollback, and only on
-connections with a configured level. Because the re-apply makes pycubrid
-reconnect immediately, reading the rest of a result after `commit()` /
+connections with a configured level. On pycubrid before 1.8.0, the re-apply
+makes pycubrid reconnect immediately, so reading the rest of a result after `commit()` /
 `rollback()` on such a connection raises `OperationalError` instead of returning
 only the buffered rows ([Known Issue 8](#8-unfinished-results-after-commit--rollback)).
-Because the re-apply reconnects right after each commit/rollback, every pooled
+For the same reason, on pycubrid before 1.8.0 every pooled
 connection with a configured level holds a broker CAS while it sits idle in the
 pool (without one, pycubrid releases the CAS until the next request); size the
 broker's `MAX_NUM_APPL_SERVER` for the pool accordingly. If the re-apply itself
@@ -311,9 +327,11 @@ the start of the next transaction, where a second failure raises before any
 statement runs. After a one-off `execution_options()` override on an engine
 without a configured level, checkin stops the re-apply for that connection.
 Session state set with raw SQL (such as `SET @var` or a `SET TRANSACTION`
-statement you run yourself) is still lost after `commit()` / `rollback()` on
-pycubrid. The workaround will be removed once a pycubrid release fixing
-cubrid-lab/pycubrid#468 is the minimum supported version.
+statement you run yourself) is lost after `commit()` / `rollback()` on
+pycubrid before 1.8.0, and on any version after a real CAS restart. The declared
+dependency range stays `pycubrid>=1.3.2,<2.0`, so the workaround remains
+active for pycubrid versions before 1.8.0; it will be dropped once the floor
+is raised to 1.8.0 or later (tracked in #559).
 
 **`AUTOCOMMIT` on pycubrid.** In autocommit mode every statement ends a
 transaction, so pycubrid reconnects before each following statement (two
