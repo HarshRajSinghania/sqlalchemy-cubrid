@@ -833,9 +833,7 @@ class TestTypeCompilation:
         [
             pytest.param(sa.NCHAR(0), id="sa.NCHAR"),
             pytest.param(cubrid_types.NCHAR(length=0), id="cubrid.NCHAR"),
-            pytest.param(
-                cubrid_types.CHAR(length=0, national=True), id="cubrid.CHAR-national"
-            ),
+            pytest.param(cubrid_types.CHAR(length=0, national=True), id="cubrid.CHAR-national"),
         ],
     )
     def test_nchar_zero_length_raises(self, type_):
