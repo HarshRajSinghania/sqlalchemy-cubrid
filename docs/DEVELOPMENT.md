@@ -155,7 +155,8 @@ make test-offline  # Run every offline test (fast + repository-tooling) with cov
 make test-all      # Run tox across all Python versions
 make integration   # Start a run-owned Docker project → run integration tests (pycubrid) → remove it
 make docker-up     # Start CUBRID Docker container
-make docker-down   # Stop and remove CUBRID Docker container
+make docker-down   # Stop CUBRID and delete its data volume (removes all test data)
+make docker-fix-db-host # Repair a volume created before CUBRID_DB_HOST was set (keeps the data)
 make clean         # Remove build artifacts and caches
 ```
 
@@ -251,9 +252,14 @@ pytest test/test_integration.py -v
 # Run async integration tests
 pytest test/test_aio_integration.py -v
 
-# Stop the container
+# Stop the container and delete its data volume (removes all test data)
 docker compose down -v
 ```
+
+`docker compose down` without `-v` keeps the volume. A volume created before
+`docker-compose.yml` set `CUBRID_DB_HOST` fails with -353 once its container is
+recreated; `make docker-fix-db-host` repairs it and keeps the data (see
+[Troubleshooting](TROUBLESHOOTING.md#database-server-host-not-found-after-recreating-the-container)).
 
 The regular tox profile requires an explicit `cubrid+pycubrid` URL. It rejects
 missing URLs and CUBRIDdb C-extension schemes, then probes both sync and derived

@@ -156,7 +156,8 @@ make test-offline  # 모든 오프라인 테스트(빠른 테스트 + 저장소 
 make test-all      # 모든 Python 버전에서 tox 실행
 make integration   # 실행 전용 Docker 프로젝트 시작 → 통합 테스트 실행 (pycubrid) → 삭제
 make docker-up     # CUBRID Docker 컨테이너 시작
-make docker-down   # CUBRID Docker 컨테이너 중지 및 제거
+make docker-down   # CUBRID 중지 및 데이터 볼륨 삭제 (테스트 데이터가 모두 삭제됨)
+make docker-fix-db-host # CUBRID_DB_HOST 설정 전에 만든 볼륨 복구 (데이터 유지)
 make clean         # 빌드 산출물과 캐시 제거
 ```
 
@@ -244,9 +245,14 @@ pytest test/test_integration.py -v
 # 비동기 통합 테스트 실행
 pytest test/test_aio_integration.py -v
 
-# 컨테이너 중지
+# 컨테이너 중지 및 데이터 볼륨 삭제 (테스트 데이터가 모두 삭제됨)
 docker compose down -v
 ```
+
+`-v` 없이 `docker compose down`을 하면 볼륨이 남습니다. `docker-compose.yml`이
+`CUBRID_DB_HOST`를 설정하기 전에 만든 볼륨은 컨테이너를 다시 만들면 -353으로 실패합니다.
+`make docker-fix-db-host`가 데이터를 유지한 채 복구합니다
+([문제 해결](TROUBLESHOOTING.md#컨테이너를-다시-만든-뒤-데이터베이스-서버-호스트를-찾을-수-없음)).
 
 일반 tox 프로파일은 명시적인 `cubrid+pycubrid` URL을 요구합니다. URL 누락이나
 CUBRIDdb C 확장 스킴을 거부하고 pytest 전에 제한된 시간의 `SELECT 1`로 동기·파생

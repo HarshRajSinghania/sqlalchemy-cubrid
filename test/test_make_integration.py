@@ -12,11 +12,13 @@ from pathlib import Path
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import time
 
 import pytest
+import yaml
 
 PROJECT = "sa-it-stub"
 UP = f"docker compose -p {PROJECT} up -d"
@@ -625,3 +627,92 @@ def test_integration_lets_startup_finish_before_cleanup(integration_runner, sign
     assert _lifecycle(commands).count(DOWN) == 1
     assert WAIT not in commands
     assert not _alive(stub_pid)
+
+
+def test_compose_registers_the_database_for_a_stable_host() -> None:
+    """The image records CUBRID_DB_HOST (else the container ID) on the volume (#997)."""
+    root = Path(__file__).resolve().parents[1]
+    compose = yaml.safe_load((root / "docker-compose.yml").read_text())
+    environment = compose["services"]["cubrid"]["environment"]
+    assert environment["CUBRID_DB"] == "testdb"
+    assert environment["CUBRID_DB_HOST"] == "localhost"
+
+
+def test_fix_db_host_rewrites_only_the_testdb_host(tmp_path: Path) -> None:
+    """Run the target's in-container script against a local databases.txt (#997)."""
+    make = shutil.which("make")
+    if make is None:
+        pytest.skip("make is required for Makefile regression tests")
+    databases = tmp_path / "databases"
+    databases.mkdir()
+    listing = databases / "databases.txt"
+    listing.write_text(
+        "#db-name\tvol-path\t\tdb-host\t\tlog-path\t\tlob-base-path\n"
+        "testdb\t\t/var/lib/cubrid/testdb\tee2bfa1105f9\t/var/lib/cubrid/testdb\t"
+        "file:/var/lib/cubrid/testdb/lob\n"
+        "otherdb\t/var/lib/cubrid/otherdb\tee2bfa1105f9\t/var/lib/cubrid/otherdb\t"
+        "file:/var/lib/cubrid/otherdb/lob\n"
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "docker.log"
+    docker = bin_dir / "docker"
+    # Log the call, then run the `sh -c` script locally as `docker compose exec` would.
+    docker.write_text(
+        "#!/bin/sh\n"
+        'printf "%s\\n" "$*" >> "$REVIEW_LOG"\n'
+        'while [ "$#" -gt 0 ] && [ "$1" != "-c" ]; do shift; done\n'
+        'exec sh -c "$2"\n'
+    )
+    docker.chmod(0o755)
+    env = dict(os.environ)
+    env["PATH"] = str(bin_dir) + os.pathsep + env.get("PATH", "")
+    env["REVIEW_LOG"] = str(log)
+    env["CUBRID_DATABASES"] = str(databases)
+    env["TMPDIR"] = str(tmp_path)
+    makefile = Path(__file__).resolve().parents[1] / "Makefile"
+    listing.chmod(0o640)
+    os.utime(listing, (1_000_000_000, 1_000_000_000))
+    inode = listing.stat().st_ino
+
+    def fix() -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [make, "-f", str(makefile), "docker-fix-db-host"],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+
+    result = fix()
+
+    assert result.returncode == 0, result.stderr
+    # Rewritten in place, so the owner and mode the server relies on are kept.
+    assert listing.stat().st_ino == inode
+    assert stat.S_IMODE(listing.stat().st_mode) == 0o640
+    backup = databases / "databases.txt.before-fix-db-host"
+    # cp -p: the backup keeps the original's mode and timestamp.
+    assert stat.S_IMODE(backup.stat().st_mode) == 0o640
+    assert backup.stat().st_mtime == 1_000_000_000
+    assert log.read_text().startswith("compose exec -T -u root cubrid sh -c ")
+    original = (databases / "databases.txt.before-fix-db-host").read_text()
+    assert original.splitlines()[1].split()[2] == "ee2bfa1105f9"
+    lines = listing.read_text().splitlines()
+    assert lines[0] == "#db-name\tvol-path\t\tdb-host\t\tlog-path\t\tlob-base-path"
+    assert lines[1].split() == [
+        "testdb",
+        "/var/lib/cubrid/testdb",
+        "localhost",
+        "/var/lib/cubrid/testdb",
+        "file:/var/lib/cubrid/testdb/lob",
+    ]
+    assert lines[2].split()[2] == "ee2bfa1105f9"
+    assert "localhost" in result.stdout
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["bin", "databases", "docker.log"]
+    assert sorted(path.name for path in databases.iterdir()) == [
+        "databases.txt",
+        "databases.txt.before-fix-db-host",
+    ]
+    # A second run keeps the first backup, the only record of the stale host.
+    assert fix().returncode == 0
+    assert backup.read_text() == original
