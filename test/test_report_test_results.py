@@ -259,3 +259,79 @@ def test_step_summary_reports_a_missing_or_unreadable_summary(tmp_path, capsys, 
     assert mod.main(["step-summary", "--summary", str(path), "--title", "T"]) == 0
     text = capsys.readouterr().out
     assert text == f"### T\n\nNo readable `{path}` was written (the run stopped early).\n"
+
+
+def test_require_executed_makes_an_all_skipped_run_incomplete(tmp_path):
+    kwargs = {"lane": "integration", "coverage": None, "threshold": None, "pytest_exit": 0}
+    skipped = mod.build_summary(junit=_junit(tmp_path, SKIPPED), require_executed=True, **kwargs)
+    assert skipped["status"] == "INCOMPLETE"
+    assert skipped["executed"] is False
+    ran = mod.build_summary(
+        junit=_junit(tmp_path, SKIPPED, XFAILED), require_executed=True, **kwargs
+    )
+    assert ran["status"] == "PASS"
+    assert ran["executed"] is True
+    # Without the flag, an all-skipped run keeps its previous meaning.
+    assert mod.build_summary(junit=_junit(tmp_path, SKIPPED), **kwargs)["status"] == "PASS"
+
+
+def test_reason_is_recorded_and_stops_a_pass(tmp_path):
+    summary = mod.build_summary(
+        lane="integration",
+        junit=_junit(tmp_path, PASSING),
+        coverage=None,
+        threshold=None,
+        pytest_exit=0,
+        reason="why",
+    )
+    assert summary["status"] == "INCOMPLETE"
+    assert summary["problems"] == ["why"]
+
+
+def test_environment_records_versions_and_no_credential(tmp_path, monkeypatch):
+    monkeypatch.setenv("CUBRID_PASSWORD", "topsecret")
+    monkeypatch.setenv("CUBRID_TEST_URL", "cubrid+pycubrid://dba:topsecret@localhost/testdb")
+    output = tmp_path / "out" / "environment.json"
+    code = mod.main(
+        [
+            "environment",
+            "--lane", "integration",
+            "--command", "make integration",
+            "--cubrid-version", "11.2",
+            "--driver", "pycubrid",
+            "--output", str(output),
+        ]
+    )  # fmt: skip
+    assert code == 0
+    text = output.read_text(encoding="utf-8")
+    assert "topsecret" not in text
+    document = json.loads(text)
+    assert document["cubrid_version"] == "11.2"
+    assert document["driver"]["name"] == "pycubrid"
+    assert document["sqlalchemy"]
+    assert document["python"] and document["platform"]
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("CUBRID_PASSWORD=topsecret make integration", "CUBRID_PASSWORD=*** make integration"),
+        ("make integration API_TOKEN='a b' X=1", "make integration API_TOKEN=*** X=1"),
+        ('DB_SECRET="s s" make x', "DB_SECRET=*** make x"),
+        (
+            "make it CUBRID_TEST_URL=cubrid+pycubrid://dba:p%40ss@localhost/db",
+            "make it CUBRID_TEST_URL=cubrid+pycubrid://dba:***@localhost/db",
+        ),
+        (
+            "make integration INTEGRATION_DRIVER=pycubrid",
+            "make integration INTEGRATION_DRIVER=pycubrid",
+        ),
+    ],
+)
+def test_environment_redacts_credentials_in_the_command(tmp_path, command, expected):
+    output = tmp_path / "environment.json"
+    mod.main(
+        ["environment", "--lane", "l", "--command", command, "--cubrid-version", "11.2",
+         "--driver", "pycubrid", "--output", str(output)]
+    )  # fmt: skip
+    assert json.loads(output.read_text("utf-8"))["command"] == expected
