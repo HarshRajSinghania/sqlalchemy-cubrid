@@ -78,7 +78,7 @@ make verify
 pytest test/test_compiler.py -v
 
 # 특정 테스트 실행
-pytest test/test_compiler.py::TestCubridSQLCompiler::test_select_limit -v
+pytest test/test_compiler.py::TestSelectCompilation::test_select_limit -v
 ```
 
 `make test`는 `-m "not integration"`을 선택하고(`make test-offline`은 호환성을 위해 남긴

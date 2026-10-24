@@ -72,7 +72,7 @@ make verify
 pytest test/test_compiler.py -v
 
 # Run a specific test
-pytest test/test_compiler.py::TestCubridSQLCompiler::test_select_limit -v
+pytest test/test_compiler.py::TestSelectCompilation::test_select_limit -v
 ```
 
 `make test` also writes `junit.xml`, `coverage.xml` and `summary.json` to the gitignored
